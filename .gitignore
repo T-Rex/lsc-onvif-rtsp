@@ -1,0 +1,24 @@
+# Local-only research, process notes, kernel dumps and camera captures.
+# Preserved on disk, never published. Findings are distilled in RESEARCH_RESULTS.md.
+/research/
+
+# Build artifacts (regenerable by the Docker build)
+/output/
+**/output/
+*.tar
+*.tar.gz
+
+# Large binary dumps (kernel images, device tree) — live under research/ anyway
+*.bin
+*.dtb
+
+# Development brief / AI task prompt — kept locally, never published.
+# (Contains the dev LAN address and notes that root Telnet/FTP is open on the
+# test camera; not part of the shipped project.)
+/CLAUDE.md
+/claude.md
+
+# Editor / OS cruft
+.DS_Store
+Thumbs.db
+*~

@@ -1,0 +1,63 @@
+Advertise only what this deployment provides.
+
+- Media GetServiceCapabilities: SnapshotUri=false (no snapshot service on
+  this camera) and MaximumNumberOfProfiles=1 (one RTSP stream).
+- Device GetCapabilities / GetServiceCapabilities: IPVersion6=false
+  (onvif_simple_server only advertises IPv4 service addresses).
+
+diff --git a/device_service_files/GetCapabilities_no_ptz.xml b/device_service_files/GetCapabilities_no_ptz.xml
+index 10d7ca9..76f1ae0 100644
+--- a/device_service_files/GetCapabilities_no_ptz.xml
++++ b/device_service_files/GetCapabilities_no_ptz.xml
+@@ -10,7 +10,7 @@
+                     <tt:Network>
+                         <tt:IPFilter>false</tt:IPFilter>
+                         <tt:ZeroConfiguration>false</tt:ZeroConfiguration>
+-                        <tt:IPVersion6>true</tt:IPVersion6>
++                        <tt:IPVersion6>false</tt:IPVersion6>
+                         <tt:DynDNS>false</tt:DynDNS>
+                     </tt:Network>
+                     <tt:System>
+diff --git a/device_service_files/GetServiceCapabilities.xml b/device_service_files/GetServiceCapabilities.xml
+index c0d20f2..d38a8ad 100644
+--- a/device_service_files/GetServiceCapabilities.xml
++++ b/device_service_files/GetServiceCapabilities.xml
+@@ -7,7 +7,7 @@
+             <tds:Capabilities>
+                 <tds:Network IPFilter="false"
+                              ZeroConfiguration="false"
+-                             IPVersion6="true"
++                             IPVersion6="false"
+                              DynDNS="false"
+                              Dot11Configuration="false"
+                              Dot1XConfigurations="0"
+diff --git a/device_service_files/GetServices_with_capabilities_no_ptz_no_media2.xml b/device_service_files/GetServices_with_capabilities_no_ptz_no_media2.xml
+index c25b103..5c0130c 100644
+--- a/device_service_files/GetServices_with_capabilities_no_ptz_no_media2.xml
++++ b/device_service_files/GetServices_with_capabilities_no_ptz_no_media2.xml
+@@ -78,8 +78,8 @@
+                 <tds:Namespace>http://www.onvif.org/ver10/media/wsdl</tds:Namespace>
+                 <tds:XAddr>%MEDIA_SERVICE_ADDRESS%</tds:XAddr>
+                 <tds:Capabilities>
+-                    <trt:Capabilities SnapshotUri="true">
+-                        <trt:ProfileCapabilities MaximumNumberOfProfiles="2"/>
++                    <trt:Capabilities SnapshotUri="false">
++                        <trt:ProfileCapabilities MaximumNumberOfProfiles="1"/>
+                         <trt:StreamingCapabilities RTPMulticast="false" RTP_TCP="true" RTP_RTSP_TCP="true"/>
+                     </trt:Capabilities>
+                 </tds:Capabilities>
+diff --git a/media_service_files/GetServiceCapabilities.xml b/media_service_files/GetServiceCapabilities.xml
+index 7d6804f..5bccc70 100644
+--- a/media_service_files/GetServiceCapabilities.xml
++++ b/media_service_files/GetServiceCapabilities.xml
+@@ -3,8 +3,8 @@
+                    xmlns:trt="http://www.onvif.org/ver10/media/wsdl">
+     <SOAP-ENV:Body>
+         <trt:GetServiceCapabilitiesResponse>
+-            <trt:Capabilities SnapshotUri="true" Rotation="false" VideoSourceMode="false" OSD="false" TemporaryOSDText="false" EXICompression="false">
+-                <trt:ProfileCapabilities MaximumNumberOfProfiles="2"/>
++            <trt:Capabilities SnapshotUri="false" Rotation="false" VideoSourceMode="false" OSD="false" TemporaryOSDText="false" EXICompression="false">
++                <trt:ProfileCapabilities MaximumNumberOfProfiles="1"/>
+                 <trt:StreamingCapabilities RTPMulticast="false"
+                                            RTP_TCP="true"
+                                            RTP_RTSP_TCP="true"/>

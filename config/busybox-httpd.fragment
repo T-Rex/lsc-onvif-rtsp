@@ -1,0 +1,22 @@
+# BusyBox 1.36.1 configuration fragment, applied on top of "make allnoconfig".
+# Result: a static binary that contains only the httpd applet with CGI.
+#
+# Static, no shared-library dependencies on the camera.
+CONFIG_STATIC=y
+CONFIG_LFS=y
+# IPv4 only: onvif_simple_server advertises IPv4 service addresses only, and
+# the camera kernel's IPv6 support is unknown.
+# (CONFIG_FEATURE_IPV6 stays disabled by allnoconfig.)
+
+CONFIG_HTTPD=y
+CONFIG_FEATURE_HTTPD_PORT_DEFAULT=8080
+# CGI is what onvif_simple_server needs (POST body on stdin, CONTENT_LENGTH,
+# REQUEST_METHOD, REMOTE_ADDR, "Status:" / "HTTP/1.1" response headers).
+CONFIG_FEATURE_HTTPD_CGI=y
+CONFIG_FEATURE_HTTPD_SET_REMOTE_PORT_TO_ENV=y
+# A:/D: IP allow/deny rules in httpd.conf, used to keep ONVIF on the LAN.
+CONFIG_FEATURE_HTTPD_ACL_IP=y
+# Date: header in responses.
+CONFIG_FEATURE_HTTPD_DATE=y
+# Everything else (basic auth, proxy, gzip, ranges, setuid, interpreters,
+# error pages, ETag, Last-Modified) stays disabled: not needed for ONVIF.

@@ -1,0 +1,16 @@
+# Build the ONVIF package for the LSC Smart Connect PTZ 3007325.
+#
+#   docker compose build
+#   docker compose run --rm build
+#
+# Results appear in .\output on the Windows host.
+services:
+  build:
+    build: .
+    image: onvif-armv5-builder:latest
+    volumes:
+      - ./:/src:ro
+      - ./output:/output
+    environment:
+      # Override to build a different upstream commit (not recommended).
+      ONVIF_COMMIT: 7b3941af76a57277ba975efaf2366cb8c6fa1936

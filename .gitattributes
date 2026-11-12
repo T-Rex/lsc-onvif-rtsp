@@ -1,0 +1,4 @@
+# Everything that ends up on the camera or runs in the Linux container must
+# keep LF line endings, even in a Windows checkout.
+* text=auto eol=lf
+*.tar.gz binary

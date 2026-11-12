@@ -1,0 +1,131 @@
+--- a/ptz_service.c
++++ b/ptz_service.c
+@@ -29,6 +29,55 @@
+ 
+ extern service_context_t service_ctx;
+ presets_t presets;
++
++/* --- PTZ ContinuousMove Timeout support (added by ptz-smooth upgrade) --- */
++#define PTZ_TIMEOUT_DEFAULT_MS 10000L
++#define PTZ_TIMEOUT_MAX_MS     60000L
++
++/* Parse an ONVIF xs:duration (e.g. PT5S, PT0.5S, PT1M30S) to milliseconds.
++ * NULL/empty -> def_ms; malformed -> def_ms; clamped to [0, max_ms]. Only
++ * the parsed numeric result is used; the raw string never reaches a shell. */
++static long parse_onvif_duration_ms(const char *str, long def_ms, long max_ms)
++{
++    const char *p = str;
++    double total = 0.0;
++    int in_time = 0, saw_field = 0, neg = 0;
++    long ms;
++
++    if (p == NULL || *p == 0)
++        return def_ms;
++    if (*p == '-') { neg = 1; p++; }
++    if (*p != 'P')
++        return def_ms;
++    p++;
++    while (*p) {
++        char *end;
++        double val;
++        if (*p == 'T') { in_time = 1; p++; continue; }
++        val = strtod(p, &end);
++        if (end == p)
++            return def_ms;
++        switch (*end) {
++            case 'H': total += val * 3600.0; break;
++            case 'M': total += in_time ? val * 60.0 : val * 2592000.0; break;
++            case 'S': total += val; break;
++            case 'D': total += val * 86400.0; break;
++            case 'W': total += val * 604800.0; break;
++            case 'Y': total += val * 31536000.0; break;
++            default: return def_ms;
++        }
++        saw_field = 1;
++        p = end + 1;
++    }
++    if (!saw_field)
++        return def_ms;
++    if (neg)
++        return 0;
++    ms = (long)(total * 1000.0 + 0.5);
++    if (ms < 0) ms = 0;
++    if (ms > max_ms) ms = max_ms;
++    return ms;
++}
+ 
+ int ptz_supports_zoom()
+ {
+@@ -487,6 +536,8 @@
+ 
+ int ptz_continuous_move()
+ {
++    long ptz_tmo_ms;
++    char ptz_tmo_arg[24];
+     const char *x = NULL;
+     const char *y = NULL;
+     const char *z = NULL;
+@@ -519,6 +570,15 @@
+         }
+     }
+ 
++    {
++        /* ContinuousMove Timeout: parsed, clamped, appended to each move
++         * command as a trailing integer millisecond argument. */
++        const char *tmo_str = get_element("Timeout", "Body");
++        ptz_tmo_ms = parse_onvif_duration_ms(tmo_str, PTZ_TIMEOUT_DEFAULT_MS, PTZ_TIMEOUT_MAX_MS);
++        snprintf(ptz_tmo_arg, sizeof(ptz_tmo_arg), " %ld", ptz_tmo_ms);
++        log_info("ContinuousMove timeout: requested=%s effective=%ldms",
++                 tmo_str ? tmo_str : "(default)", ptz_tmo_ms);
++    }
+     if (x != NULL) {
+         dx = atof(x);
+ 
+@@ -528,6 +588,7 @@
+                 return -3;
+             }
+             snprintf(sys_command, sizeof(sys_command), service_ctx.ptz_node.move_right, dx);
++            strncat(sys_command, ptz_tmo_arg, sizeof(sys_command) - strlen(sys_command) - 1);
+             if (run_command(sys_command) != 0) {
+                 send_action_failed_fault("ptz_service", -9);
+                 return -9;
+@@ -539,6 +600,7 @@
+                 return -4;
+             }
+             snprintf(sys_command, sizeof(sys_command), service_ctx.ptz_node.move_left, -dx);
++            strncat(sys_command, ptz_tmo_arg, sizeof(sys_command) - strlen(sys_command) - 1);
+             if (run_command(sys_command) != 0) {
+                 send_action_failed_fault("ptz_service", -10);
+                 return -10;
+@@ -556,6 +618,7 @@
+                 return -5;
+             }
+             snprintf(sys_command, sizeof(sys_command), service_ctx.ptz_node.move_up, dy);
++            strncat(sys_command, ptz_tmo_arg, sizeof(sys_command) - strlen(sys_command) - 1);
+             if (run_command(sys_command) != 0) {
+                 send_action_failed_fault("ptz_service", -11);
+                 return -11;
+@@ -567,6 +630,7 @@
+                 return -6;
+             }
+             snprintf(sys_command, sizeof(sys_command), service_ctx.ptz_node.move_down, -dy);
++            strncat(sys_command, ptz_tmo_arg, sizeof(sys_command) - strlen(sys_command) - 1);
+             if (run_command(sys_command) != 0) {
+                 send_action_failed_fault("ptz_service", -12);
+                 return -12;
+@@ -584,6 +648,7 @@
+                 return -7;
+             }
+             snprintf(sys_command, sizeof(sys_command), service_ctx.ptz_node.move_in, dz);
++            strncat(sys_command, ptz_tmo_arg, sizeof(sys_command) - strlen(sys_command) - 1);
+             if (run_command(sys_command) != 0) {
+                 send_action_failed_fault("ptz_service", -13);
+                 return -13;
+@@ -595,6 +660,7 @@
+                 return -8;
+             }
+             snprintf(sys_command, sizeof(sys_command), service_ctx.ptz_node.move_out, -dz);
++            strncat(sys_command, ptz_tmo_arg, sizeof(sys_command) - strlen(sys_command) - 1);
+             if (run_command(sys_command) != 0) {
+                 send_action_failed_fault("ptz_service", -14);
+                 return -14;

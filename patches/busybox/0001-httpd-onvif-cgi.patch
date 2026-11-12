@@ -1,0 +1,25 @@
+Treat /onvif/* as CGI in BusyBox httpd.
+
+This is the patch published in the onvif_simple_server README ("Use httpd
+from busybox", valid for BusyBox 1.36.1). Stock httpd only executes CGI
+programs below /cgi-bin/, and the ONVIF endpoints (/onvif/device_service,
+/onvif/media_service, ...) have no file extension that an interpreter rule
+could match, so the patch is required.
+
+diff -Naur busybox-1.36.1.ori/networking/httpd.c busybox-1.36.1/networking/httpd.c
+--- busybox-1.36.1.ori/networking/httpd.c	2024-01-08 16:45:49.504118695 +0100
++++ busybox-1.36.1/networking/httpd.c	2024-01-08 16:52:14.701167800 +0100
+@@ -2406,6 +2406,13 @@
+ 		}
+ 		cgi_type = CGI_NORMAL;
+ 	}
++	else if (is_prefixed_with(tptr, "onvif/")) {
++		if (tptr[6] == '\0') {
++			/* protect listing "cgi-bin/" */
++			send_headers_and_exit(HTTP_FORBIDDEN);
++		}
++		cgi_type = CGI_NORMAL;
++	}
+ #endif
+
+ 	if (urlp[-1] == '/') {

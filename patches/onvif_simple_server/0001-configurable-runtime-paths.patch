@@ -1,0 +1,75 @@
+Make runtime paths overridable at compile time and survive a missing log dir.
+
+- DEFAULT_CONF_FILE, DEFAULT_JSON_CONF_FILE, DEFAULT_LOG_FILE, DEBUG_FILE
+  (onvif_simple_server) and DEFAULT_LOG_FILE, DEFAULT_TEMPLATE_DIR
+  (wsd_simple_server) become #ifndef defaults so build.sh can point them at
+  the camera's tmpfs runtime directory /tmp/onvif with -D flags. The
+  upstream values are unchanged when no -D is given.
+- If the log file cannot be opened, log to /dev/null instead of exiting
+  (CGI) or crashing on a NULL FILE* (wsd).
+
+diff --git a/onvif_simple_server.c b/onvif_simple_server.c
+index 0e19b98..14c6619 100644
+--- a/onvif_simple_server.c
++++ b/onvif_simple_server.c
+@@ -39,10 +39,18 @@
+ #include "utils.h"
+ #include "log.h"
+ 
++#ifndef DEFAULT_CONF_FILE
+ #define DEFAULT_CONF_FILE "/etc/onvif_simple_server.conf"
++#endif
++#ifndef DEFAULT_JSON_CONF_FILE
+ #define DEFAULT_JSON_CONF_FILE "/etc/onvif_simple_server.json"
++#endif
++#ifndef DEFAULT_LOG_FILE
+ #define DEFAULT_LOG_FILE "/var/log/onvif_simple_server.log"
++#endif
++#ifndef DEBUG_FILE
+ #define DEBUG_FILE "/tmp/onvif_simple_server.debug"
++#endif
+ 
+ #define ROTATION_LOG_LENGTH 3
+ 
+@@ -167,7 +175,12 @@ int main(int argc, char ** argv)
+     rotate_log();
+     fLog = fopen(DEFAULT_LOG_FILE, "w");
+     if (fLog == NULL) {
++        /* A missing or read-only log directory must not take the ONVIF
++         * service down: keep answering requests without a log. */
+         fprintf(stderr, "Unable to open log file %s\n", DEFAULT_LOG_FILE);
++        fLog = fopen("/dev/null", "w");
++    }
++    if (fLog == NULL) {
+         exit(EXIT_FAILURE);
+     }
+     conf_file = conf_file_buffer;
+diff --git a/wsd_simple_server.c b/wsd_simple_server.c
+index 30f56d0..7a9ce26 100644
+--- a/wsd_simple_server.c
++++ b/wsd_simple_server.c
+@@ -42,8 +42,12 @@
+ #define PORT 3702
+ #define TYPE "NetworkVideoTransmitter"
+ 
++#ifndef DEFAULT_LOG_FILE
+ #define DEFAULT_LOG_FILE     "/var/log/wsd_simple_server.log"
++#endif
++#ifndef DEFAULT_TEMPLATE_DIR
+ #define DEFAULT_TEMPLATE_DIR "/etc/wsd_simple_server"
++#endif
+ 
+ #define RECV_BUFFER_LEN 4096
+ 
+@@ -407,6 +411,11 @@ int main(int argc, char **argv)
+     }
+ 
+     fLog = fopen(DEFAULT_LOG_FILE, "w");
++    if (fLog == NULL) {
++        /* Logging to a NULL stream would crash on the first message. */
++        fLog = fopen("/dev/null", "w");
++        if (fLog == NULL) exit(EXIT_FAILURE);
++    }
+     log_add_fp(fLog, debug);
+     log_set_level(debug);
+     log_set_quiet(1);
