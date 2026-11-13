@@ -17,6 +17,20 @@ REL="$SRC/ptz-smooth/release-1.4"
 SD="$OUT/sd_card"; B="$OUT/sdbuild"
 step(){ echo; echo "### $*"; }
 die(){ echo "SDCARD BUILD FAILED: $*" >&2; exit 1; }
+
+# This script runs INSIDE the onvif-armv5-builder container (repo bind-mounted at
+# /src, cross-toolchain on PATH), not directly on the host. Catch the common
+# mistake of running it on Windows/host and print the right command.
+if [ ! -f "$SRC/build.sh" ]; then
+    echo "ERROR: $SRC/build.sh not found - build-sdcard.sh must run INSIDE the" >&2
+    echo "       onvif-armv5-builder container, not on the host." >&2
+    echo "From the repo root (PowerShell):" >&2
+    echo "  docker compose build" >&2
+    echo "  docker run --rm -v \"\${PWD}:/src:ro\" -v \"\${PWD}\\output:/output\" onvif-armv5-builder \`" >&2
+    echo "    bash -c \"tr -d '\\r' < /src/build-sdcard.sh > /tmp/b.sh && bash /tmp/b.sh\"" >&2
+    exit 1
+fi
+
 mkdir -p "$B"
 
 step "1/4 ONVIF server + PTZ CGI (base build + PTZ patch via EXTRA_PATCHES)"
@@ -54,10 +68,57 @@ mv "$SD/onvif/start.sh.tmp" "$SD/onvif/start.sh"; chmod 755 "$SD/onvif/start.sh"
 : > "$SD/onvif_autostart.enabled"
 : > "$SD/rtsp_autostart.enabled"
 sed 's/\r$//' "$SRC/sdcard/rtsp_factory.ini" > "$SD/rtsp_factory.ini"
+# Bake Wi-Fi station creds into the RTSP factory config so that when the boot
+# worker restarts anyka_ipc in factory mode it stays on YOUR LAN (STA). Without
+# this, factory mode falls back to the camera's own AP (172.14.10.x) and the
+# ONVIF server loses the LAN address. Written to output/ only (git-ignored).
+if [ "${WIFI_MODE:-}" = sta ] && [ -n "${WIFI_SSID:-}" ]; then
+    {
+        echo ""
+        echo "[wifi_station]"
+        echo "ssid=${WIFI_SSID}"
+        echo "passphrase=${WIFI_PASS:-}"
+        if [ -n "${WIFI_IP:-}" ]; then
+            echo "ip=${WIFI_IP}"
+            echo "netmask=${WIFI_NETMASK:-255.255.255.0}"
+            echo "gateway=${WIFI_GW:-}"
+        fi
+    } >> "$SD/rtsp_factory.ini"
+    echo "sd_card: rtsp_factory.ini [wifi_station] set (anyka_ipc joins '${WIFI_SSID}' in RTSP mode)"
+fi
 mkdir -p "$SD/install"
 sed 's/\r$//' "$SRC/sdcard/install/install-autostart.sh" > "$SD/install/install-autostart.sh"; chmod 755 "$SD/install/install-autostart.sh"
 sed 's/\r$//' "$SRC/sdcard/install/rtsp_autostart.sh" > "$SD/install/rtsp_autostart.sh"; chmod 755 "$SD/install/rtsp_autostart.sh"
 [ -f "$SRC/sdcard/README.md" ] && sed 's/\r$//' "$SRC/sdcard/README.md" > "$SD/README.md"
+
+# Optional ONVIF credentials (WS-UsernameToken), baked into the card's
+# onvif_auth.conf. These are SEPARATE from the Telnet root password, and from
+# RTSP: the factory anyka_ipc RTSP server has no authentication (its RTSP parser
+# has no Authorization field; the :554/main_ch stream is open by design), so
+# there is no RTSP login/password to set here. Written to output/ only.
+AUTHF="$SD/onvif/etc/onvif_auth.conf"
+if [ -n "${ONVIF_USER:-}" ] && [ -f "$AUTHF" ]; then
+    sed -e '/^user=/d' -e '/^password=/d' "$AUTHF" > "$AUTHF.tmp"
+    { echo "user=${ONVIF_USER}"; echo "password=${ONVIF_PASS:-}"; } >> "$AUTHF.tmp"
+    mv -f "$AUTHF.tmp" "$AUTHF"
+    echo "sd_card: ONVIF auth ENABLED (WS-UsernameToken, user '${ONVIF_USER}')"
+else
+    echo "sd_card: ONVIF auth left disabled (set ONVIF_USER/ONVIF_PASS to enable)"
+fi
+
+step "3b/4 assemble sd_card_telnet/ (factory-reset Telnet bootstrap)"
+# A tiny, compile-free card whose ONLY job is to open a root Telnet shell on a
+# factory-reset camera (which ships with Telnet off), so you can then run
+# install-autostart.sh. It writes no flash. Credit: guino/LSCOutdoor1080P.
+# Delegated to build-telnet-sd.sh (single source of truth); it honours the same
+# TELNET_ROOT_PASSWORD and the WIFI_* env vars. prepare-telnet-sd.ps1 wraps it.
+STL="$OUT/sd_card_telnet"
+if [ -f "$SRC/build-telnet-sd.sh" ]; then
+    tr -d '\r' < "$SRC/build-telnet-sd.sh" > /tmp/telnetbuild.sh
+    SRC="$SRC" OUT="$OUT" sh /tmp/telnetbuild.sh || echo "WARN: telnet card build failed"
+else
+    echo "WARN: $SRC/build-telnet-sd.sh missing -> telnet card skipped"
+fi
 
 step "4/4 ABI verify + checksums"
 rc=0
@@ -73,6 +134,11 @@ case "$tag" in *5TE*|v5T*) : ;; *) echo "WARN: unexpected arch tag $tag"; rc=1;;
 [ "$flt" = soft ] || { echo "ERROR: hard-float!"; rc=1; }
 ( cd "$SD" && find . -type f ! -name SHA256SUMS | LC_ALL=C sort | xargs sha256sum > SHA256SUMS )
 
+if [ -d "$STL" ]; then
+    ( cd "$STL" && find . -type f ! -name SHA256SUMS | LC_ALL=C sort | xargs sha256sum > SHA256SUMS )
+fi
+
 echo; echo "=== sd_card tree ==="; ( cd "$OUT" && find sd_card -maxdepth 2 | LC_ALL=C sort )
-echo; echo "sd_card ready at output/sd_card (rc=$rc)"
+[ -d "$STL" ] && { echo; echo "=== sd_card_telnet tree ==="; ( cd "$OUT" && find sd_card_telnet | LC_ALL=C sort ); }
+echo; echo "sd_card ready at output/sd_card; telnet bootstrap at output/sd_card_telnet (rc=$rc)"
 exit $rc

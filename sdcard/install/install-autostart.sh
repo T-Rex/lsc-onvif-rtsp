@@ -15,8 +15,10 @@
 # /etc/config/rtsp_autostart.sh (see the end of this script).
 set -u
 CFG=/etc/config
-SD=/mnt
 HERE=$(cd "$(dirname "$0")" && pwd)
+# The card may be mounted at /mnt (normal boot) or /tmp/sd (Telnet bootstrap).
+# Derive it from where this script actually lives so the final notes are right.
+SD=$(cd "$HERE/.." && pwd)
 
 [ -d "$CFG" ] || { echo "ERROR: $CFG not present (is JFFS2 mounted?)"; exit 1; }
 [ -f "$HERE/rtsp_autostart.sh" ] || { echo "ERROR: $HERE/rtsp_autostart.sh missing"; exit 1; }
@@ -36,19 +38,30 @@ if [ ! -f "$CFG/sensor_driver.sh" ]; then
     echo "      or hook rtsp_autostart.sh into whatever script your firmware runs at boot."
     exit 1
 fi
-if grep -q "RTSP_SD_AUTOSTART_V1" "$CFG/sensor_driver.sh"; then
-    echo "hook already present in $CFG/sensor_driver.sh (idempotent, nothing to do)"
+# Always end up with exactly ONE fresh hook, no matter how many times this ran
+# before: if any previous hook is present, restore the pristine stock file first
+# (or strip the block as a fallback), then append the current hook once.
+if grep -q "RTSP_SD_AUTOSTART" "$CFG/sensor_driver.sh"; then
+    if [ -f "$CFG/sensor_driver.sh.rtsp-original" ]; then
+        cp "$CFG/sensor_driver.sh.rtsp-original" "$CFG/sensor_driver.sh"
+        echo "removed previous hook (restored stock sensor_driver.sh)"
+    else
+        sed '/# RTSP_SD_AUTOSTART/,/^fi$/d' "$CFG/sensor_driver.sh" > "$CFG/sensor_driver.sh.tmp" \
+            && mv -f "$CFG/sensor_driver.sh.tmp" "$CFG/sensor_driver.sh"
+        cp "$CFG/sensor_driver.sh" "$CFG/sensor_driver.sh.rtsp-original"
+        echo "stripped previous hook(s) (no backup existed; saved current as stock)"
+    fi
 else
-    [ -f "$CFG/sensor_driver.sh.rtsp-original" ] || cp "$CFG/sensor_driver.sh" "$CFG/sensor_driver.sh.rtsp-original"
-    cat >> "$CFG/sensor_driver.sh" <<'HOOK'
+    cp "$CFG/sensor_driver.sh" "$CFG/sensor_driver.sh.rtsp-original"
+fi
+cat >> "$CFG/sensor_driver.sh" <<'HOOK'
 
 # RTSP_SD_AUTOSTART_V1
 if [ -f /etc/config/rtsp_autostart.sh ]; then
     sh /etc/config/rtsp_autostart.sh </dev/null >/tmp/rtsp_auto_boot.log 2>&1 &
 fi
 HOOK
-    echo "hooked rtsp_autostart.sh into $CFG/sensor_driver.sh (stock saved as .rtsp-original)"
-fi
+echo "hooked rtsp_autostart.sh into $CFG/sensor_driver.sh (single fresh hook; stock saved as .rtsp-original)"
 
 echo "=== done. Verify the SD has: onvif/, onvif_autostart.enabled, rtsp_autostart.enabled, rtsp_factory.ini"
 echo "    then REBOOT. After ~90-120s: RTSP 554, ONVIF 8080, WS-Discovery 3702, PTZ bridge."

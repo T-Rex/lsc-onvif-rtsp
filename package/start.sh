@@ -71,7 +71,7 @@ msg "Interface $IFACE has address $IP"
 # FAT32 keeps neither execute bits nor symlinks, so the binaries are copied
 # to tmpfs and made executable there; the web root is built from symlinks.
 if have df; then
-    FREE_KB=$(df -k /tmp 2>/dev/null | sed -n '2,$p' | tr -s ' ' | sed -n '$p' | cut -d' ' -f4)
+    FREE_KB=$(df -k /tmp 2>/dev/null | sed -n '2,$p' | sed -e 's/^ *//' -e 's/  */ /g' | sed -n '$p' | cut -d' ' -f4)
     case "$FREE_KB" in
         ''|*[!0-9]*) ;;
         *) if [ "$FREE_KB" -lt "$MIN_TMP_FREE_KB" ]; then
@@ -101,7 +101,7 @@ done
 
 # Runtime configuration: the SD card file with CR removed, serial number
 # derived if set to AUTO, and the optional credentials appended.
-MAC=$(cat "/sys/class/net/$IFACE/address" 2>/dev/null | tr 'a-f' 'A-F')
+MAC=$(cat "/sys/class/net/$IFACE/address" 2>/dev/null | sed 'y/abcdef/ABCDEF/')
 SERIAL=$(conf_get serial_num)
 if [ "$SERIAL" = AUTO ] || [ -z "$SERIAL" ]; then
     # Stable per-device identifier that does not expose the MAC address.
@@ -110,9 +110,9 @@ if [ "$SERIAL" = AUTO ] || [ -z "$SERIAL" ]; then
     elif have md5sum; then
         H=$(printf 'lsc-onvif-%s' "$MAC" | md5sum)
     else
-        H=$(printf 'lsc-onvif-%s' "$MAC" | cksum | tr -d ' ')
+        H=$(printf 'lsc-onvif-%s' "$MAC" | cksum | sed 's/ //g')
     fi
-    SERIAL="LSC-$(echo "$H" | tr 'a-f' 'A-F' | sed 's/^\([0-9A-F]\{12\}\).*/\1/')"
+    SERIAL="LSC-$(echo "$H" | sed 'y/abcdef/ABCDEF/' | sed 's/^\([0-9A-F]\{12\}\).*/\1/')"
 fi
 
 AUTH_USER=$(conf_get user "$SRC_AUTH")
@@ -120,7 +120,7 @@ AUTH_PASS=$(conf_get password "$SRC_AUTH")
 
 umask 077
 {
-    tr -d '\r' < "$SRC_CONF" | sed \
+    sed "s/$CR\$//" "$SRC_CONF" | sed \
         -e '/^user=/d' -e '/^password=/d' \
         -e "s|^serial_num=.*|serial_num=$SERIAL|" \
         -e "s|^ifs=.*|ifs=$IFACE|" \
@@ -132,7 +132,7 @@ umask 077
         echo "password=$AUTH_PASS"
     fi
 } > "$RUN_CONF.new" && mv -f "$RUN_CONF.new" "$RUN_CONF"
-tr -d '\r' < "$SRC_HTTPD_CONF" > "$RUN/etc/httpd.conf"
+sed "s/$CR\$//" "$SRC_HTTPD_CONF" > "$RUN/etc/httpd.conf"
 umask 022
 if [ -n "$AUTH_USER" ]; then
     [ -n "$AUTH_PASS" ] || msg "WARNING: user '$AUTH_USER' has an empty password."
@@ -162,7 +162,7 @@ done
 mkdir -p "$W/scripts"
 for f in "$BASE"/www/onvif/scripts/*.sh; do
     [ -f "$f" ] || continue
-    tr -d '\r' < "$f" > "$W/scripts/$(basename "$f")"
+    sed "s/$CR\$//" "$f" > "$W/scripts/$(basename "$f")"
     chmod 755 "$W/scripts/$(basename "$f")"
 done
 # WS-Discovery templates: staged outside the served web root ($RUN/www) so they

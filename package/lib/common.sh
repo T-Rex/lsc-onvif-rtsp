@@ -31,9 +31,12 @@ WSD_DEBUG=0
 HTTPD_VERBOSE=0
 MIN_TMP_FREE_KB=2048
 QEMU=""
+# Carriage-return byte. This camera's BusyBox has no `tr` applet, so we strip CR
+# from Windows-edited config files with sed matching this literal byte instead.
+CR=$(printf '\r')
 if [ -f "$BASE/etc/onvif.env" ]; then
     # Strip CR in case the file was edited on Windows.
-    eval "$(tr -d '\r' < "$BASE/etc/onvif.env" | sed -n 's/^\([A-Z_][A-Z0-9_]*\)=\(.*\)$/\1=\2/p')"
+    eval "$(sed "s/$CR\$//" "$BASE/etc/onvif.env" | sed -n 's/^\([A-Z_][A-Z0-9_]*\)=\(.*\)$/\1=\2/p')"
 fi
 # Test hook: build.sh runs the ARM binaries through QEMU with ONVIF_QEMU set.
 # It is never set on the camera.
@@ -61,12 +64,16 @@ msg() {
 
 # conf_get KEY [FILE] - first value of KEY= in an onvif_simple_server style file.
 conf_get() {
-    tr -d '\r' < "${2:-$SRC_CONF}" 2>/dev/null | sed -n "/^$1=/{s/^$1=//;p;q;}"
+    sed -n "/^$1=/{s/^$1=//;s/$CR\$//;p;q;}" "${2:-$SRC_CONF}" 2>/dev/null
 }
 
 # conf_all KEY [FILE] - all values of KEY=, space separated.
 conf_all() {
-    tr -d '\r' < "${2:-$SRC_CONF}" 2>/dev/null | sed -n "s/^$1=//p" | tr '\n' ' ' | sed 's/ *$//'
+    _v=""
+    for _x in $(sed -n "s/^$1=//p" "${2:-$SRC_CONF}" 2>/dev/null | sed "s/$CR\$//"); do
+        _v="$_v $_x"
+    done
+    echo "${_v# }"
 }
 
 # pids_of PATH - PIDs whose command line contains PATH. The last character is

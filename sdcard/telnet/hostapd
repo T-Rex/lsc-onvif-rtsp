@@ -1,0 +1,15 @@
+#!/bin/sh
+# Boot hook for the Telnet bootstrap card.
+#
+# On this firmware, when /mnt/_ht_ap_mode.conf is present the factory boot
+# (main.sh -> service.sh) copies /mnt/hostapd to /tmp/hostapd and the Wi-Fi
+# scripts execute it very early, as:  /tmp/hostapd /etc/config/hostapd.conf -B
+# We do NOT start an access point here; this file is only a hijack point that
+# runs our bootstrap (hack.sh). NOTE: the _ht_ap_mode.conf marker makes the
+# stock firmware bring wlan0 up as an AP. hack.sh -> wifi.sh then puts the camera
+# where custom/configs/wifi.conf asks (MODE=sta joins your LAN; MODE=ap keeps the
+# hotspot).
+#
+# Credit: boot-chain discovery by guino/LSCOutdoor1080P; payload shape adapted
+# from the lsc-tuya-toolkit. See sdcard/telnet/README.md.
+/bin/sh /mnt/hack.sh
