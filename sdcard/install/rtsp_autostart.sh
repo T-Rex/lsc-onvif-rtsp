@@ -47,17 +47,19 @@ while [ "$i" -lt 180 ]; do
         ""|0.0.0.0|172.14.10.*) : ;;   # not ready, or still on the factory AP
         *) break ;;
     esac
-    sleep 2; i=$((i + 2))
+    sleep 1; i=$((i + 1))
 done
 case "$IP" in
     ""|0.0.0.0|172.14.10.*) echo "ERROR: no LAN Wi-Fi (last='$IP')" >> "$LOG"; exit 1 ;;
 esac
 echo "LAN Wi-Fi up: $IP" >> "$LOG"; ifconfig wlan0 >> "$LOG" 2>&1
 
-# Wait for the factory app, then let it settle.
+# Wait for the factory app, then let it settle. 10s is enough for anyka_ipc to
+# finish bringing up the sensor/ISP before we restart it in RTSP mode; raise it
+# again if a restarted anyka_ipc ever comes up without video.
 i=0
-while [ "$i" -lt 90 ]; do pgrep anyka_ipc >/dev/null 2>&1 && break; sleep 2; i=$((i + 2)); done
-echo "Waiting 20 seconds for initialization" >> "$LOG"; sleep 20
+while [ "$i" -lt 90 ]; do pgrep anyka_ipc >/dev/null 2>&1 && break; sleep 1; i=$((i + 1)); done
+echo "Waiting 10 seconds for initialization" >> "$LOG"; sleep 10
 
 # Re-locate the SD (mounts can change during Wi-Fi bring-up) and re-check opt-in.
 SD=$(find_sd) || { echo "SD vanished before restart; exit" >> "$LOG"; exit 0; }
@@ -67,14 +69,14 @@ cp "$SD/rtsp_factory.ini" /tmp/_ak39_factory.ini || { echo "ERROR: cannot stage 
 
 echo "Restarting anyka_ipc in RTSP mode" >> "$LOG"
 killall -9 anyka_ipc 2>/dev/null
-sleep 3
+sleep 2
 setsid /usr/bin/anyka_ipc </dev/null >> "$LOG" 2>&1 &
 echo "RTSP restart requested" >> "$LOG"
 
 # ONVIF (and PTZ via onvif/start.sh) from the SD, after a short settle.
 if [ -f "$SD/onvif_autostart.enabled" ] && [ -f "$SD/onvif/start.sh" ]; then
     (
-        sleep 12
+        sleep 6
         SD2=$(find_sd) || SD2="$SD"
         if [ -f "$SD2/onvif_autostart.enabled" ] && [ -f "$SD2/onvif/start.sh" ]; then
             mkdir -p "$SD2/onvif/logs"
